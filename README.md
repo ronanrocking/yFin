@@ -1,5 +1,6 @@
 # yFin
 Python Project to Analyse Stock Market Trends and Patterns.
+Uses the Upstox API
 
 Variable Conventions
 - snake case (variable_name) : general case for all vairables
