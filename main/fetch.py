@@ -2,10 +2,14 @@ import requests
 from private import credentials
 import json
 from pathlib import Path
+import requests
+import urllib.parse
+from datetime import datetime, date
+from zoneinfo import ZoneInfo
 
-BASE_URL = "https://api-v2.upstox.com"
+BASE_URL = "https://api.upstox.com/v3"
 HEADERS = {"Authorization": f"Bearer {credentials.ACCESS_TOKEN}"}
-
+IST = ZoneInfo("Asia/Kolkata")
 
 def get_instrument_key(symbol, exchange="NSE"):
     """
@@ -45,9 +49,64 @@ def get_instrument_key(symbol, exchange="NSE"):
     return None
 
 
+def _normalize_date(d):
+    """Ensure YYYY-MM-DD string in IST."""
+    if isinstance(d, str):
+        return d
+    if isinstance(d, datetime):
+        return d.astimezone(IST).date().isoformat()
+    if isinstance(d, date):
+        return d.isoformat()
+    raise ValueError("from_date/to_date must be str, date or datetime")
+
+import pandas as pd
+
+def get_historical_candle(instrument_key, unit, interval, from_date=None, to_date=None):
+    """
+    Fetch historical candle data from Upstox v3 and return as a pandas DataFrame.
+    Path format: /v3/historical-candle/:instrument_key/:unit/:interval/:to_date/:from_date (from_date optional)
+
+    If from_date is None, fetches from the earliest available data up to to_date (defaults to today).
+
+    Columns: timestamp (datetime, IST), open, high, low, close, volume, oi
+    Index: timestamp
+    """
+    unit = unit.lower()
+    if unit not in ("minutes", "hours", "days", "weeks", "months"):
+        raise ValueError("unit must be one of: minutes, hours, days, weeks, months")
+
+    interval = str(int(interval))  # numeric only
+    to_str = _normalize_date(to_date or datetime.now(IST))
+
+    encoded_key = urllib.parse.quote(instrument_key, safe="")
+
+    # Build URL depending on whether from_date is provided
+    if from_date:
+        from_str = _normalize_date(from_date)
+        url = f"{BASE_URL}/historical-candle/{encoded_key}/{unit}/{interval}/{to_str}/{from_str}"
+    else:
+        url = f"{BASE_URL}/historical-candle/{encoded_key}/{unit}/{interval}/{to_str}"
+
+    resp = requests.get(url, headers=HEADERS)
+    resp.raise_for_status()
+    data = resp.json()
+
+    # candles are under data["candles"], each row = [timestamp, open, high, low, close, volume, oi]
+    candles = data.get("data", {}).get("candles", [])
+
+    # Convert to DataFrame
+    df = pd.DataFrame(candles, columns=["timestamp", "open", "high", "low", "close", "volume", "oi"])
+    df["timestamp"] = pd.to_datetime(df["timestamp"])  # IST aware from API
+    df.set_index("timestamp", inplace=True)
+    df.sort_index(inplace=True)
+
+    return df
 
 
 
+if (__name__ == "__main__"):
+    #Testing with Symbol / Exchange
+    instrument_key = get_instrument_key("ACC", "NSE")
+    df = get_historical_candle(instrument_key, unit="hours", interval=1)
+    print(df)
 
-key = get_instrument_key("TCS", "NSE")
-print("Instrument Key:", key)
