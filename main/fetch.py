@@ -61,16 +61,31 @@ def _normalize_date(d):
 
 import pandas as pd
 
-def get_historical_candle(instrument_key, unit, interval, from_date=None, to_date=None):
+def get_historical_candle(symbol, exchange="NSE", unit="hours", interval=1, from_date=None, to_date=None):
     """
-    Fetch historical candle data from Upstox v3 and return as a pandas DataFrame.
+    Fetch historical candle data from Upstox v3 using the trading symbol and exchange.
+    Internally resolves instrument_key.
+
     Path format: /v3/historical-candle/:instrument_key/:unit/:interval/:to_date/:from_date (from_date optional)
 
     If from_date is None, fetches from the earliest available data up to to_date (defaults to today).
 
     Columns: timestamp (datetime, IST), open, high, low, close, volume, oi
     Index: timestamp
+
+    :param symbol: Trading symbol (e.g., "BHEL")
+    :param exchange: Exchange name (default "NSE")
+    :param unit: "minutes", "hours", "days", "weeks", "months"
+    :param interval: numeric interval as int (e.g., 1)
+    :param from_date: optional, str/date/datetime
+    :param to_date: optional, str/date/datetime
+    :return: pandas DataFrame of candles
     """
+    # Resolve instrument_key internally
+    instrument_key = get_instrument_key(symbol, exchange)
+    if not instrument_key:
+        raise ValueError(f"Could not find instrument key for symbol '{symbol}' on exchange '{exchange}'")
+
     unit = unit.lower()
     if unit not in ("minutes", "hours", "days", "weeks", "months"):
         raise ValueError("unit must be one of: minutes, hours, days, weeks, months")
@@ -104,9 +119,9 @@ def get_historical_candle(instrument_key, unit, interval, from_date=None, to_dat
 
 
 
-if (__name__ == "__main__"):
-    #Testing with Symbol / Exchange
-    instrument_key = get_instrument_key("ACC", "NSE")
-    df = get_historical_candle(instrument_key, unit="hours", interval=1)
+
+if __name__ == "__main__":
+    # Example with only symbol (everything else defaults)
+    df = get_historical_candle("NIFTY")
     print(df)
 
