@@ -115,5 +115,5 @@ def get_clustered_stocks(days=5, exchanges="NSE", ema_accuracy=0.2):
 
     return symbols_with_clusters
 
-clustered_stocks = get_clustered_stocks()
-print(clustered_stocks)
+df_equities = extract_equity_symbols("NSE")
+print(df_equities)

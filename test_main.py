@@ -8,8 +8,36 @@ import numpy as np
 from scipy.interpolate import interp1d
 
 import json
+import pandas as pd
 import os
 
+
+'''the stocks i want, to use with kiteforex-'''
+stocks = [
+    "ADANIENT", "APOLLOHOSP", "AMBUJACEM", "APOLLOTYRE", "ASHOKLEY", "AUROPHARMA",
+    "BANKBARODA", "BATAINDIA", "BEL", "BHARATFORG", "BHEL", "BOSCHLTD", "BIOCON",
+    "CANBK", "CHOLAFIN", "COLPAL", "CADILAHC", "CONCOR", "CUMMINSIND", "DABUR",
+    "DIVISLAB", "DLF", "ESCORTS", "EXIDEIND",
+    "GLENMARK", "GMRINFRA", "GODREJCP", "HAVELLS", "HINDPETRO", "ICICIPRULI",
+    "IDEA", "IDFCFIRSTB", "IGL", "INDIGO", "JINDALSTEL", "JUBFOOD",
+    "LTFH", "LICHSGFIN", "LUPIN", "MANAPPURAM", "MARICO", "MFSL", "MINDTREE",
+    "MOTHERSUMI", "MRF", "MUTHOOTFIN", "NATIONALUM", "NMDC",
+    "PAGEIND", "PETRONET", "PFC", "PIDILITIND", "PNB", "PVR", "RBLBANK", "RECLTD",
+    "SAIL", "SIEMENS", "SRF", "SUNTV", "TATAPOWER", "TATACHEM", "TORNTPOWER",
+    "TVSMOTOR", "UBL", "VOLTAS", "BANDHANBANK", "FINNIFTY", "SYNGENE", "ALKEM",
+    "AUBANK",
+    "CUB", "DEEPAKNTR", "GRANULES", "IRCTC", "LTI", "MPHASIS", "NAVINFLUOR",
+    "PIIND", "BANKNIFTY", "TRENT", "HDFCAMC", "LALPATHLAB", "ABFRL", "COROMANDEL",
+    "GUJGASLTD", "ICICIGI", "INDHOTEL", "INDUSTOWER", "METROPOLIS", "HAL",
+    "DIXON", "CANFINHOME", "INDIAMART", "IEX",
+    "IPCALAB", "OFSS", "POLYCAB", "MCX", "GNFC", "HONAUT", "NBCC", "RAIN",
+    "BALRAMCHIN", "ABCAPITAL", "SENSEX", "CROMPTON", "ABBOTINDIA", "DALBHARAT",
+    "DELTACORP", "INDIACEM", "OBEROIRLTY", "PERSISTENT", "GODREJPROP", "NAUKRI",
+    "TATACONSUM", "ABB", "ASTRAL",
+    "ATUL", "FSL", "INTELLECT", "LAURUSLABS", "SBICARD", "SUZLON"
+]
+
+#i have already deefined my stocks above, if you want to use ALL 2.5k stocks for any exchange use the funciton below!
 def extract_equity_symbols(exchanges=None):
     """
     Extracts only underlying stock symbols (equities) from the instruments JSON file.
@@ -23,9 +51,9 @@ def extract_equity_symbols(exchanges=None):
     Returns:
         pd.DataFrame: DataFrame with 'symbol' and 'exchange' columns for equities only.
     """
+
     # Hardcoded path to your JSON file
     json_path = os.path.join("main", "resources", "keys.json")
-    print(f"[DEBUG] Loading instruments JSON from: {json_path}")
 
     # Load JSON data
     with open(json_path, "r") as f:
@@ -41,6 +69,7 @@ def extract_equity_symbols(exchanges=None):
 
     # Filter for equities only
     equity_types = ["EQ", "SM"]  # add other equity types if needed
+
     rows = []
     for item in data:
         symbol = item.get("trading_symbol")
@@ -50,53 +79,42 @@ def extract_equity_symbols(exchanges=None):
         if not symbol or not exchange or not instr_type:
             continue  # skip incomplete entries
 
+        # Filter by instrument type (equities)
         if instr_type not in equity_types:
             continue
 
+        # Filter by exchange if specified
         if exchanges is None or any(exchange.startswith(e) for e in exchanges):
             rows.append({"symbol": symbol, "exchange": exchange})
 
     df = pd.DataFrame(rows)
-    print(f"[DEBUG] Total equities extracted: {len(df)}")
     return df
 
 
-def get_clustered_stocks(days=5, exchanges="NSE", ema_accuracy=0.2, test_limit=None):
+def get_clustered_stocks(stocks, exchange = "NSE", days=5, ema_accuracy=0.1):
     """
     Scan all equity symbols and return a list of symbols that have
     EMA 3 or EMA 4 clusters in the last `days` days.
 
     Parameters:
         days (int): Number of days to look back from today (default=5)
-        exchanges (str | list[str] | None): Optional filter for exchanges
+        
         ema_accuracy (float): EMA cluster tolerance percentage (default=0.2%)
-        test_limit (int | None): Limit number of symbols to test (for debugging)
 
     Returns:
         list: Symbols with EMA clusters
     """
-    # Get all equity symbols (optionally filtered by exchange)
-    df_equities = extract_equity_symbols(exchanges)
     
-    if df_equities.empty:
-        print("[ERROR] No equities found for the given exchange(s). Exiting.")
-        return []
-
-    if test_limit is not None:
-        df_equities = df_equities.head(test_limit)
-        print(f"[INFO] Testing first {test_limit} symbols only.")
-
+    # Get all equity symbols (optionally filtered by exchange)
+    
+    
     symbols_with_clusters = []
 
     to_date = datetime.now()
     from_date = to_date - timedelta(days=days)
-    print(f"[INFO] Fetching candle data from {from_date} to {to_date}")
 
-    for i, row in df_equities.iterrows():
-        symbol = row['symbol']
-        exchange = row['exchange']
-
-        print(f"[{i+1}/{len(df_equities)}] Processing {symbol} ({exchange})...")
+    for symbol in stocks:
+        
 
         try:
             # Fetch candle data for the symbol
@@ -108,29 +126,19 @@ def get_clustered_stocks(days=5, exchanges="NSE", ema_accuracy=0.2, test_limit=N
             )
 
             if df.empty:
-                print(f"  [INFO] No candle data for {symbol}, skipping.")
                 continue
 
             # Check EMA clusters
             cluster_3 = private.conditions.ema_cluster_3(df, task="past", accuracy=ema_accuracy)
             cluster_4 = private.conditions.ema_cluster_4(df, task="past", accuracy=ema_accuracy)
 
-            print(f"  [DEBUG] EMA Cluster 3 dates: {cluster_3}")
-            print(f"  [DEBUG] EMA Cluster 4 dates: {cluster_4}")
-
             if cluster_3 or cluster_4:
                 symbols_with_clusters.append(symbol)
-                print(f"  [CLUSTER FOUND] {symbol}")
 
         except Exception as e:
-            print(f"  [ERROR] Fetching data for {symbol}: {e}")
+            print(f"Error fetching data for {symbol}: {e}")
             continue
 
-    print(f"\n[INFO] Total symbols with EMA clusters: {len(symbols_with_clusters)}")
     return symbols_with_clusters
 
-
-# Example usage
-if __name__ == "__main__":
-    clustered_stocks = get_clustered_stocks(days=5, exchanges="NSE", test_limit=10)
-    print("\n[RESULT] Symbols with EMA clusters:", clustered_stocks)
+print(get_clustered_stocks(stocks[:5]))
